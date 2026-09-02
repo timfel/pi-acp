@@ -69,32 +69,8 @@ export function bashResultText(result: unknown): string {
   return [stdout, stderr].filter((part): part is string => typeof part === 'string' && part.length > 0).join('\n')
 }
 
-export function bashExitCode(result: unknown, isError: boolean): number {
-  const record = result as BashResultRecord | null | undefined
-  const details = record?.details as BashResultRecord | null | undefined
-  const exitCode = details?.exitCode ?? record?.exitCode ?? details?.code ?? record?.code
-  return typeof exitCode === 'number' ? exitCode : isError ? 1 : 0
-}
+export function bashResultContent(text: string): ToolCallContent[] | undefined {
+  if (!text) return undefined
 
-export function bashOutputDelta(previous: string, next: string): string {
-  return next.startsWith(previous) ? next.slice(previous.length) : next
-}
-
-export function bashTerminalContent(toolCallId: string): ToolCallContent[] {
-  return [{ type: 'terminal', terminalId: toolCallId }] satisfies ToolCallContent[]
-}
-
-export function bashTerminalInfoMeta(toolCallId: string, cwd: string) {
-  // Zed renders ACP `execute` tools as display-only terminals when paired with
-  // terminal content plus terminal metadata. See ACP execute tool schema:
-  // https://agentclientprotocol.com/protocol/schema#param-execute
-  return { terminal_info: { terminal_id: toolCallId, cwd } }
-}
-
-export function bashTerminalOutputMeta(toolCallId: string, data: string) {
-  return { terminal_output: { terminal_id: toolCallId, data } }
-}
-
-export function bashTerminalExitMeta(toolCallId: string, exitCode: number) {
-  return { terminal_exit: { terminal_id: toolCallId, exit_code: exitCode, signal: null } }
+  return [{ type: 'content', content: { type: 'text', text } }] satisfies ToolCallContent[]
 }

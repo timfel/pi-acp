@@ -30,16 +30,7 @@ import { PiRpcProcess } from '../pi-rpc/process.js'
 import { listPiSessions, findPiSession } from './pi-sessions.js'
 import { normalizePiAssistantText, normalizePiMessageText } from './translate/pi-messages.js'
 import { toolResultToText } from './translate/pi-tools.js'
-import {
-  bashCommand,
-  bashExitCode,
-  bashResultText,
-  bashTerminalContent,
-  bashTerminalExitMeta,
-  bashTerminalInfoMeta,
-  bashTerminalOutputMeta,
-  isBashTool
-} from './translate/bash.js'
+import { bashCommand, bashResultContent, bashResultText, isBashTool } from './translate/bash.js'
 import { promptToPiMessage } from './translate/prompt.js'
 import { loadSlashCommands, parseCommandArgs, toAvailableCommands } from './slash-commands.js'
 import { getAgentDir, getEnableSkillCommands, getQuietStartup } from './pi-settings.js'
@@ -1011,9 +1002,7 @@ export class PiAcpAgent implements ACPAgent {
               toolCallId,
               title: bashCommand(m) ?? toolName,
               kind: 'execute',
-              status: 'completed',
-              content: bashTerminalContent(toolCallId),
-              _meta: bashTerminalInfoMeta(toolCallId, params.cwd)
+              status: 'completed'
             }
           })
 
@@ -1023,10 +1012,7 @@ export class PiAcpAgent implements ACPAgent {
               sessionUpdate: 'tool_call_update',
               toolCallId,
               status: isError ? 'failed' : 'completed',
-              _meta: {
-                ...(text ? bashTerminalOutputMeta(toolCallId, text) : {}),
-                ...bashTerminalExitMeta(toolCallId, bashExitCode(m, isError))
-              }
+              content: bashResultContent(text)
             }
           })
           continue

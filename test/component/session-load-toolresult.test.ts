@@ -48,18 +48,16 @@ test('PiAcpAgent: loadSession replays toolResult as tool_call + tool_call_update
     assert.equal(toolCall.toolCallId, 'call_1')
     assert.equal(toolCall.title, 'echo hello')
     assert.equal(toolCall.kind, 'execute')
-    assert.deepEqual(toolCall.content, [{ type: 'terminal', terminalId: 'call_1' }])
-    assert.deepEqual(toolCall._meta, { terminal_info: { terminal_id: 'call_1', cwd: '/tmp/project' } })
+    assert.equal(toolCall.content, undefined)
+    assert.equal(toolCall._meta, undefined)
     assert.equal(toolCall.rawOutput, undefined)
 
     const toolCallUpdate = updates.find(u => u?.sessionUpdate === 'tool_call_update')
     assert.ok(toolCallUpdate)
     assert.equal(toolCallUpdate.toolCallId, 'call_1')
     assert.equal(toolCallUpdate.status, 'completed')
-    assert.deepEqual(toolCallUpdate._meta, {
-      terminal_output: { terminal_id: 'call_1', data: 'hello from bash' },
-      terminal_exit: { terminal_id: 'call_1', exit_code: 0, signal: null }
-    })
+    assert.deepEqual(toolCallUpdate.content, [{ type: 'content', content: { type: 'text', text: 'hello from bash' } }])
+    assert.equal(toolCallUpdate._meta, undefined)
     assert.equal(toolCallUpdate.rawOutput, undefined)
   } finally {
     PiRpcProcess.spawn = originalSpawn
