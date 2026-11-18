@@ -428,7 +428,7 @@ export class PiAcpAgent implements ACPAgent {
           const pi = (await session.proc.getCommands()) as any
           const { commands } = toAvailableCommandsFromPiGetCommands(pi, {
             enableSkillCommands,
-            includeExtensionCommands: false
+            includeExtensionCommands: true
           })
 
           await this.conn.sessionUpdate({
@@ -1154,7 +1154,7 @@ export class PiAcpAgent implements ACPAgent {
           const pi = (await proc.getCommands()) as any
           const { commands } = toAvailableCommandsFromPiGetCommands(pi, {
             enableSkillCommands,
-            includeExtensionCommands: false
+            includeExtensionCommands: true
           })
 
           await this.conn.sessionUpdate({

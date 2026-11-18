@@ -20,6 +20,7 @@ import {
 } from '../pi-rpc/process.js'
 import { maybeAuthRequiredError } from './auth-required.js'
 import { buildExtensionUiForm } from './extension-ui-form.js'
+import { isPiExtensionCommand } from './pi-commands.js'
 import { SessionStore } from './session-store.js'
 import { expandSlashCommand, type FileSlashCommand } from './slash-commands.js'
 import {
@@ -338,6 +339,11 @@ export class PiAcpSession {
   // completes only when `agent_settled` is emitted.
   private inAgentLoop = false
 
+  // Sticky within a turn: pi started an agent loop (`agent_start`). Command-only pi
+  // extension handlers resolve the prompt RPC without any agent run and never emit
+  // `agent_settled`, so for them the RPC response is the completion boundary.
+  private agentRunStarted = false
+
   // For ACP diff support: capture file contents before edit/write mutations,
   // then emit ToolCallContent {type:"diff"}. Compatible structured edit/write
   // events may need to be implemented in pi in the future.
@@ -632,6 +638,7 @@ export class PiAcpSession {
   private startTurn(t: QueuedTurn): void {
     this.cancelRequested = false
     this.inAgentLoop = false
+    this.agentRunStarted = false
 
     this.pendingTurn = { title: t.title, resolve: t.resolve, reject: t.reject }
     void this.maybeAutoTitle(t.title)
@@ -642,34 +649,51 @@ export class PiAcpSession {
       _meta: { piAcp: { queueDepth: this.turnQueue.length, running: true } }
     })
 
-    // Kick off pi, but completion is determined by pi events, not the RPC response.
-    // The prompt RPC only acknowledges acceptance; retry, compaction, or queued
-    // continuations may emit multiple `agent_end` events before `agent_settled`.
-    this.proc.prompt(t.message, t.images).catch(err => {
+    void this.runPrompt(t)
+  }
+
+  // Kick off pi, but completion is determined by pi events, not the RPC response.
+  // The prompt RPC only acknowledges acceptance; retry, compaction, or queued
+  // continuations may emit multiple `agent_end` events before `agent_settled`.
+  // Command-only pi extension handlers are the exception: they never start an agent
+  // loop, so their RPC response settles the turn.
+  private async runPrompt(t: QueuedTurn): Promise<void> {
+    let isExtensionCommand = false
+    if (t.message.startsWith('/')) {
+      try {
+        isExtensionCommand = isPiExtensionCommand(await this.proc.getCommands(), t.message)
+      } catch {
+        // Command discovery is best-effort; older pi RPC may not expose commands.
+      }
+    }
+
+    try {
+      await this.proc.prompt(t.message, t.images)
+      if (isExtensionCommand && !this.agentRunStarted) void this.settleTurn()
+    } catch (err) {
       // If the subprocess errors before we get `agent_settled`, treat as error unless cancelled.
       // Also ensure we flush any already-enqueued updates first.
-      void this.flushEmits().finally(() => {
-        // If this looks like an auth/config issue, surface AUTH_REQUIRED so clients can offer terminal login.
-        const authErr = maybeAuthRequiredError(err)
-        if (authErr) {
-          this.pendingTurn?.reject(authErr)
-        } else {
-          const reason: StopReason = this.cancelRequested ? 'cancelled' : 'error'
-          this.pendingTurn?.resolve(reason)
-        }
+      await this.flushEmits()
 
-        this.pendingTurn = null
-        this.inAgentLoop = false
+      // If this looks like an auth/config issue, surface AUTH_REQUIRED so clients can offer terminal login.
+      const authErr = maybeAuthRequiredError(err)
+      if (authErr) {
+        this.pendingTurn?.reject(authErr)
+      } else {
+        const reason: StopReason = this.cancelRequested ? 'cancelled' : 'error'
+        this.pendingTurn?.resolve(reason)
+      }
 
-        // If the prompt failed, do not automatically proceed—pi may be unhealthy.
-        // But we still clear the queueDepth metadata.
-        this.emit({
-          sessionUpdate: 'session_info_update',
-          _meta: { piAcp: { queueDepth: this.turnQueue.length, running: false } }
-        })
+      this.pendingTurn = null
+      this.inAgentLoop = false
+
+      // If the prompt failed, do not automatically proceed—pi may be unhealthy.
+      // But we still clear the queueDepth metadata.
+      this.emit({
+        sessionUpdate: 'session_info_update',
+        _meta: { piAcp: { queueDepth: this.turnQueue.length, running: false } }
       })
-      void err
-    })
+    }
   }
 
   private handlePiEvent(ev: PiRpcEvent) {
@@ -990,6 +1014,24 @@ export class PiAcpSession {
 
       case 'agent_start': {
         this.inAgentLoop = true
+        this.agentRunStarted = true
+        break
+      }
+
+      case 'message_end': {
+        // pi extensions communicate via custom messages that no other event carries.
+        // Assistant/user messages stream through `message_update`, so only `custom`
+        // roles are forwarded here to avoid duplicating content.
+        const message = (ev as any).message
+        if (message?.role !== 'custom' || message?.display === false) break
+        const text = typeof message.content === 'string' ? message.content : ''
+        if (!text) break
+        const customType = typeof message.customType === 'string' ? message.customType : null
+        this.emit({
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text },
+          ...(customType ? { _meta: { piAcp: { customType } } } : {})
+        } as SessionUpdate)
         break
       }
 

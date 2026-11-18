@@ -48,6 +48,15 @@ export class FakePiRpcProcess {
   /** When set, `getSessionStats()` rejects with this error. */
   sessionStatsError: unknown = null
 
+  commands: unknown = { commands: [] }
+  /** When set, `getCommands()` rejects with this error. */
+  commandsError: unknown = null
+
+  async getCommands(): Promise<unknown> {
+    if (this.commandsError) throw this.commandsError
+    return this.commands
+  }
+
   onEvent(handler: (ev: PiRpcEvent) => void): () => void {
     this.handlers.push(handler)
     return () => {

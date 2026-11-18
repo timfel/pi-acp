@@ -177,7 +177,7 @@ Other built-in commands:
 
 - Skill commands can be enabled in pi settings and will appear in the slash command list in ACP client as `/skill:skill-name`.
 
-**Note**: Slash commands provided by pi extensions are not currently supported.
+**Note**: Slash commands provided by pi extensions are advertised via `available_commands_update` and executed over ACP. Command-only handlers (no agent loop) complete when pi's RPC resolves; handlers that start an agent run settle like normal turns. Visible custom extension messages are forwarded as agent message chunks.
 
 ## Authentication (ACP Registry support)
 
