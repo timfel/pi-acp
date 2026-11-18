@@ -1,3 +1,5 @@
+# See https://github.com/timfel/pi-acp/blob/main/AGENTS.md#fork-divergence-timfelpi-acp
+
 # pi-acp
 
 ACP ([Agent Client Protocol](https://agentclientprotocol.com/overview/introduction)) adapter for [`pi`](https://github.com/earendil-works/pi) coding agent (fka shitty coding agent).
